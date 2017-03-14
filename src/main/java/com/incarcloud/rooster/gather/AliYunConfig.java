@@ -18,6 +18,9 @@ public class AliYunConfig {
     @Value("${aliyun.MNS.queue}")
     String mnsQueue;
 
+    @Value("${aliyun.MNS.topic}")
+    String mnsTopic;
+
     @Value("${aliyun.OTS.endpoint}")
     String otsEndPoint;
 

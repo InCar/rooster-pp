@@ -33,11 +33,22 @@ public class App implements CommandLineRunner {
         // 超级简单的保护机制
         while(true) {
             try {
+                this._logger.warn("Conveyor start ...");
                 conveyor.blockedTransport();
             }
             catch(Exception ex){
-                this._logger.error(ex.toString());
-                ex.printStackTrace();
+                StringBuilder sbError = new StringBuilder();
+                Throwable exx = ex;
+                while(exx != null){
+                    if(exx != null) sbError.append("\n    ");
+                    sbError.append(exx.toString());
+                    for(StackTraceElement e: exx.getStackTrace()){
+                        sbError.append("\n        ");
+                        sbError.append(e.toString().trim());
+                    }
+                    exx = exx.getCause();
+                }
+                this._logger.error(sbError.toString());
                 this._logger.warn("10秒后重启Conveyor");
                 Thread.sleep(1000*10);
             }

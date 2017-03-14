@@ -3,15 +3,21 @@ package com.incarcloud.rooster.parser;
 import com.incarcloud.rooster.gather.BigTableEntry;
 
 import java.time.*;
-import java.util.Base64;
+import java.util.*;
 
 public class TricheerAdasPackTelemetry extends TricheerAdasPack{
     @Override
     public BigTableEntry prepareBigTableEntry(){
-        BigTableEntry t = new BigTableEntry(_vin, "TriAdas.TMR-b64", _tm);
-        String b64 = Base64.getEncoder().encodeToString(_data);
-        t.setData(b64);
-        return t;
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<BigTableEntry> prepareBigTableEntries(){
+        List<BigTableEntry> listEntries = new ArrayList<>();
+        for(TelemetrySegment s:_listSegments){
+            listEntries.add(s.prepareBigTableEntry(_vin, _tm));
+        }
+        return listEntries;
     }
 
     @Override
@@ -22,38 +28,34 @@ public class TricheerAdasPackTelemetry extends TricheerAdasPack{
         this._tm = ZonedDateTime.of(2000+_payload[0], _payload[1], _payload[2],
                 _payload[3], _payload[4], _payload[5], 0, ZoneId.of("+8")).withZoneSameInstant(ZoneId.of("Z"));
 
-        // flag 6
-        for(TricheerAdasFlag flag:TricheerAdasFlag.values()){
-            if(data[6] == flag.getValue()) this._flag = flag;
-        }
+        int posNext = 6;
+        do{
+            // flag
+            TricheerAdasFlag flag = TricheerAdasFlag.NA;
+            for(TricheerAdasFlag f: TricheerAdasFlag.values()){
+                if(f.getValue() == _payload[posNext]){
+                    flag = f;
+                    break;
+                }
+            }
+
+            TelemetrySegment segment = TelemetrySegment.create(flag);
+            if(segment == null) {
+                s_logger.warn("忽略余下的数据区");
+                break;
+            }
+            int bytes = segment.resolve(_payload, posNext+1);
+            if(segment.isResolved()) _listSegments.add(segment);
+            else s_logger.warn("三旗ADAS实时信息上报一个数据段{}解析失败,忽略", flag.name());
+
+            posNext += (bytes + 1);
+        }while(posNext < _payload.length);
+
+        super._resolved = true;
     }
 
     protected ZonedDateTime _tm;
     public ZonedDateTime getTimeStamp(){ return this._tm; }
 
-    protected TricheerAdasFlag _flag = TricheerAdasFlag.NA;
-    public TricheerAdasFlag getFlag(){ return this._flag; }
-
-    static TricheerAdasPackTelemetry create(byte[] data){
-        if(data.length < (s_frameLen+s_frameLenTelemetry)){
-            s_logger.error("三旗ADAS实时信息上报数据包长度{}小于最小可能长度{}字节",
-                    data.length, s_frameLen+s_frameLenTelemetry);
-            return null;
-        }
-
-        if(data[30] == TricheerAdasFlag.Position.getValue())
-            return new TricheerAdasPackTelemetryPos();
-        else if(data[30] == TricheerAdasFlag.MobileyeCarInfo.getValue())
-            return new TricheerAdasPackTelemetryCarInfo();
-        else if(data[30] == TricheerAdasFlag.MobileysTrafficSign.getValue())
-            return new TricheerAdasPackTelemetryTSR();
-        else if(data[30] == TricheerAdasFlag.MobileysTrafficSignDecision.getValue())
-            return new TricheerAdasPackTelemetryTSRDecision();
-        else if(data[30] == TricheerAdasFlag.MobileyeStd.getValue())
-            return new TricheerAdasPackTelemetryMobileye();
-        else
-            return new TricheerAdasPackTelemetry();
-    }
-
-    protected static final int s_frameLenTelemetry = 7;
+    private List<TelemetrySegment> _listSegments = new ArrayList<>();
 }

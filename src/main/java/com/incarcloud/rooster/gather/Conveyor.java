@@ -7,6 +7,7 @@ import com.aliyun.mns.model.*;
 import com.incarcloud.rooster.parser.TricheerAdasPack;
 import org.json.JSONObject;
 
+import java.time.DateTimeException;
 import java.util.*;
 import org.slf4j.*;
 
@@ -38,6 +39,7 @@ public class Conveyor {
     // 阻塞方式的简单转运循环
     public void blockedTransport(){
         CloudQueue queue = this.findQueue();
+        CloudTopic topic = this.findTopic();
         SyncClient ots = this.findBigDataStorage();
 
         while(true){
@@ -49,13 +51,13 @@ public class Conveyor {
                     byte[] buf = this._b64decoder.decode(body.getString("data"));
 
                     // 按mark进行处理
-                    BigTableEntry bigEntry = null;
+                    List<BigTableEntry> listEntries = null;
                     if (mark.startsWith("tricheer-adas-")) {
                         // 三旗ADAS设备数据
                         TricheerAdasPack pack = TricheerAdasPack.parse(buf);
                         if (pack != null && pack.isResolved()){
                             s_logger.info("三旗ADAS数据包:{}", body.getString("data"));
-                            bigEntry = pack.prepareBigTableEntry();
+                            listEntries = pack.prepareBigTableEntries();
                         }
                         else s_logger.warn("无法解析的三旗ADAS数据包[base64]:{}", body.getString("data"));
                     } else {
@@ -63,16 +65,25 @@ public class Conveyor {
                     }
 
                     // INSERT INTO BIG TABLE
-                    save(bigEntry, ots);
+                    boolean bSaved = save(listEntries, ots);
 
                     // DELETE MESSAGE FROM MNS
                     queue.deleteMessage(msg.getReceiptHandle());
+
+                    if(bSaved){
+                        // save okay, then send notification
+                        notify(listEntries, topic);
+                    }
+                }
+                catch(DateTimeException ex){
+                    s_logger.warn("丢弃消息,无效时间戳 {}", ex.toString());
+                    queue.deleteMessage(msg.getReceiptHandle());
                 }
                 catch (Exception ex){
-                    s_logger.error("消费消息出错: {}", ex.getMessage());
-                    ex.printStackTrace();
+                    s_logger.warn("消费消息出错: {}", ex.getMessage());
                     queue.deleteMessage(msg.getReceiptHandle());
                     s_logger.warn("移除消息: {}", msg.getMessageBodyAsString());
+                    throw ex;
                 }
             }
         }
@@ -86,30 +97,39 @@ public class Conveyor {
         return queue;
     }
 
+    private CloudTopic findTopic(){
+        CloudAccount account = new CloudAccount(this._configMNS.accessKeyId, this._configMNS.accessKeySecret,
+                this._configMNS.mnsEndPoint);
+        MNSClient client = account.getMNSClient();
+        CloudTopic topic = client.getTopicRef(this._configMNS.mnsTopic);
+        return topic;
+    }
+
     private SyncClient findBigDataStorage(){
         SyncClient client = new SyncClient(this._configOTS.otsEndPoint,
                 this._configOTS.accessKeyId, this._configOTS.accessKeySecret, this._configOTS.otsInstance);
         return client;
     }
 
-    private void save(BigTableEntry entry, SyncClient ots){
-        if(entry == null || ots == null) return;
+    private Boolean save(List<BigTableEntry> listEntries, SyncClient ots){
+        if(listEntries == null || listEntries.isEmpty() || ots == null) return false;
 
         // telemetry
-        String key = entry.makePK();
-        PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
-        primaryKeyBuilder.addPrimaryKeyColumn("key", PrimaryKeyValue.fromString(key));
-        PrimaryKey pk = primaryKeyBuilder.build();
+        BatchWriteRowRequest bat = new BatchWriteRowRequest();
+        for(BigTableEntry entry: listEntries) {
+            String key = entry.makePK();
+            PrimaryKeyBuilder primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
+            primaryKeyBuilder.addPrimaryKeyColumn("key", PrimaryKeyValue.fromString(key));
+            PrimaryKey pk = primaryKeyBuilder.build();
 
-        RowPutChange rowPutChange = new RowPutChange("telemetry", pk);
-        rowPutChange.addColumn("data", ColumnValue.fromString(entry.getData()));
+            RowPutChange rowPutChange = new RowPutChange("telemetry", pk);
+            rowPutChange.addColumn("data", ColumnValue.fromString(entry.getData()));
 
-        ots.putRow(new PutRowRequest(rowPutChange));
-        s_logger.info("AliYun OTS SAVE: {}", key);
+            bat.addRowChange(rowPutChange);
+            s_logger.info("AliYun OTS Saving telemetry -> {}", key);
 
-        // vehicle
-        if(key.contains("TriAdas.CarInfo")) {
-            try {
+            // vehicle
+            if (key.contains("TriAdas.Login")) {
                 String keyVehicle = entry.makePKVehicle();
                 primaryKeyBuilder = PrimaryKeyBuilder.createPrimaryKeyBuilder();
                 primaryKeyBuilder.addPrimaryKeyColumn("key", PrimaryKeyValue.fromString(keyVehicle));
@@ -118,12 +138,50 @@ public class Conveyor {
                 rowPutChange = new RowPutChange("vehicle", pkVehicle);
                 rowPutChange.setCondition(new Condition(RowExistenceExpectation.EXPECT_NOT_EXIST));
 
-                ots.putRow(new PutRowRequest(rowPutChange));
-            } catch (TableStoreException ex) {
-                if (ex.getErrorCode().equals("OTSConditionCheckFail")) {
-                    // 该key已经存在,直接忽略
-                } else throw ex;
+                bat.addRowChange(rowPutChange);
+                s_logger.info("AliYun OTS Saving vehicle -> {}", keyVehicle);
             }
+        }
+        if(!bat.isEmpty()){
+                BatchWriteRowResponse resp = ots.batchWriteRow(bat);
+
+                boolean bOkay = true;
+                for (BatchWriteRowResponse.RowResult result : resp.getFailedRows()){
+                    // OTSConditionCheckFail 这种错误直接忽略
+                    if(!result.getError().getCode().equals("OTSConditionCheckFail")){
+                        bOkay = false;
+                        RowChange rowChange = bat.getRowChange(result.getTableName(), result.getIndex());
+                        s_logger.error("AliYun OTS Saving Failed {} -> {} \n\t{}",
+                                result.getTableName(),
+                                rowChange.getPrimaryKey().getPrimaryKeyColumn(0).getValue().asString(),
+                                result.getError().toString());
+                    }
+                }
+                if(bOkay) s_logger.info("AliYun OTS Saved Successfully");
+                return bOkay;
+        }
+        return false;
+    }
+
+    private void notify(List<BigTableEntry> listEntries, CloudTopic topic){
+        for(BigTableEntry entry: listEntries) {
+            String key = entry.makePK();
+
+            TopicMessage msg = new Base64TopicMessage();
+            msg.setMessageBody(key);
+            msg.setMessageTag(entry.getMark());
+
+            topic.asyncPublishMessage(msg, new AsyncCallback<TopicMessage>() {
+                @Override
+                public void onSuccess(TopicMessage result) {
+                    // ignore
+                }
+
+                @Override
+                public void onFail(Exception ex) {
+                    s_logger.warn("Sent notifcation failed: {}", ex.getMessage());
+                }
+            });
         }
     }
 

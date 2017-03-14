@@ -19,6 +19,12 @@ public class TricheerAdasPack {
         return t;
     }
 
+    public List<BigTableEntry> prepareBigTableEntries(){
+        List<BigTableEntry> listEntries = new ArrayList<>();
+        listEntries.add(prepareBigTableEntry());
+        return listEntries;
+    }
+
     protected TricheerAdasCmd _cmd = TricheerAdasCmd.NA;
     public TricheerAdasCmd getCmd(){ return this._cmd; }
 
@@ -81,7 +87,7 @@ public class TricheerAdasPack {
         else if(data[2] == TricheerAdasCmd.HeartBeat.getValue())
             pack = new TricheerAdasPackHeartbeat();
         else if(data[2] == TricheerAdasCmd.Telemetry.getValue()){
-            pack = TricheerAdasPackTelemetry.create(data);
+            pack = new TricheerAdasPackTelemetry();
         }
         else
             pack = new TricheerAdasPack();

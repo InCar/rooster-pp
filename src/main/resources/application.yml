@@ -5,6 +5,7 @@ aliyun:
     MNS:
         endpoint: http://1786089012649873.mns.cn-hangzhou-internal.aliyuncs.com
         queue: rooster-dev
+        topic: rooster-dev
     OTS:
         endpoint: http://rooster-dev.cn-hangzhou.ots-internal.aliyuncs.com
         instance: rooster-dev

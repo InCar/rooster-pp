@@ -1,15 +1,15 @@
 package com.incarcloud.rooster.parser;
 
 import com.incarcloud.rooster.gather.BigTableEntry;
-import org.json.JSONStringer;
-import org.json.JSONWriter;
+import org.json.*;
 
+import java.time.ZonedDateTime;
 import java.util.*;
 
-public class TricheerAdasPackTelemetryTSRDecision extends TricheerAdasPackTelemetry {
+public class TelemetrySegmentTSRDecision extends TelemetrySegment{
     @Override
-    public BigTableEntry prepareBigTableEntry(){
-        BigTableEntry t = new BigTableEntry(_vin, "TriAdas.TSRD", _tm);
+    public BigTableEntry prepareBigTableEntry(String vin, ZonedDateTime tm){
+        BigTableEntry t = new BigTableEntry(vin, "TriAdas.TSRD", tm);
         JSONWriter writer = new JSONStringer().array();
         {
             for(TSR tsr : _listTSR){
@@ -26,29 +26,23 @@ public class TricheerAdasPackTelemetryTSRDecision extends TricheerAdasPackTeleme
     }
 
     @Override
-    protected void resolveFields(byte[] data){
-        super.resolveFields(data);
-
+    public int resolve(byte[] buf, int start){
+        final int LEN = 8; // 固定长度8字节
         // 长度检查
-        if(_payload.length < s_frameLenTelemetry+8){
-            s_logger.error("三旗ADAS实时信息上报TSRDecision数据包长度{}小于最小可能长度{}字节",
-                    _payload.length, s_frameLenTelemetry+8);
-            return;
-        }
-        else if(_payload.length > s_frameLenTelemetry+8){
-            s_logger.warn("三旗ADAS实时信息上报TSRDecision数据包长度过长,应当{}但有{}",
-                    s_frameLenTelemetry+8, _payload.length);
+        if(buf.length - start < LEN){
+            s_logger.error("三旗ADAS实时信息上报TSRDecision数据包小于最小可能长度{}字节", LEN);
+            return buf.length - start;
         }
 
         final int nTSR = 4; // 固定4个
         for(int i=0;i<4;i++){
             TSR tsr = new TSR();
 
-            TSRFlagV flagV = TSRFlag.from(_payload[s_frameLenTelemetry+2*i] & 0xff);
+            TSRFlagV flagV = TSRFlag.from(buf[start+2*i] & 0xff);
             tsr.flag = flagV.flag;
             tsr.value = flagV.value;
 
-            int flag2 = _payload[s_frameLenTelemetry+2*i+1] & 0xff;
+            int flag2 = buf[start+2*i+1] & 0xff;
             for(TSR2Flag f2:TSR2Flag.values()){
                 if(f2.getValue() == flag2){
                     tsr.flag2 = f2;
@@ -60,6 +54,7 @@ public class TricheerAdasPackTelemetryTSRDecision extends TricheerAdasPackTeleme
         }
 
         _resolved = true;
+        return LEN;
     }
 
     private List<TSR> _listTSR = new ArrayList<>();
