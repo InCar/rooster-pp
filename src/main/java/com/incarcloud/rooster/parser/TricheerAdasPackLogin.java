@@ -36,6 +36,7 @@ public class TricheerAdasPackLogin extends TricheerAdasPack {
         // timestamp 0...5
         this._tm = ZonedDateTime.of(2000+_payload[0], _payload[1], _payload[2],
                 _payload[3], _payload[4], _payload[5], 0, ZoneId.of("+8")).withZoneSameInstant(ZoneId.of("Z"));
+        this._tm = correctTime(this._tm);
 
         // SN 6,7
         this._sn = ((_payload[6]&0xff)<<8)|(_payload[7]&0xff);

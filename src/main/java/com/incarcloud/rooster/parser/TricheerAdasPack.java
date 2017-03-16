@@ -130,6 +130,15 @@ public class TricheerAdasPack {
     }
 
     protected static final int s_frameLen = 25;
+
+    protected static ZonedDateTime correctTime(ZonedDateTime tm){
+        // 如果时间早于2017年,则返回当前时间
+        if(tm != null && tm.getYear() < 2017){
+            return ZonedDateTime.now(ZoneId.of("Z"));
+        }
+
+        return tm;
+    }
 }
 
 
