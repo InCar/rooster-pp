@@ -54,6 +54,8 @@ task MarkGitVersion{
 
 compileJava{
     dependsOn MarkGitVersion
+    options.encoding = "utf-8"
+    options.compilerArgs << "-Xlint:unchecked"
 }
 
 test {
@@ -72,3 +74,5 @@ test {
         showStandardStreams = true
     }
 }
+
+defaultTasks "build"

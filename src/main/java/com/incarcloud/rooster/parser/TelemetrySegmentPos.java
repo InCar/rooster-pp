@@ -8,6 +8,8 @@ import java.time.ZonedDateTime;
 public class TelemetrySegmentPos extends TelemetrySegment {
     @Override
     public BigTableEntry prepareBigTableEntry(String vin, ZonedDateTime tm){
+        if(!_bValid) return null; // 无效位置不用存储
+
         BigTableEntry t = new BigTableEntry(vin, "TriAdas.Pos", tm);
         JSONWriter writer = new JSONStringer()
                 .object()

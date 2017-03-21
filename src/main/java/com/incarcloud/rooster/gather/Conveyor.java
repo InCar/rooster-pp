@@ -4,7 +4,9 @@ import com.alicloud.openservices.tablestore.*;
 import com.alicloud.openservices.tablestore.model.*;
 import com.aliyun.mns.client.*;
 import com.aliyun.mns.model.*;
+import com.incarcloud.rooster.parser.TricheerAdasCmd;
 import com.incarcloud.rooster.parser.TricheerAdasPack;
+import com.incarcloud.rooster.parser.TricheerAdasPackTelemetry;
 import org.json.JSONObject;
 
 import java.time.DateTimeException;
@@ -52,7 +54,10 @@ public class Conveyor {
 
                     // 按mark进行处理
                     List<BigTableEntry> listEntries = null;
-                    if (mark.startsWith("tricheer-adas-")) {
+                    if (mark.startsWith("tricheer-adas-1.")){
+                        s_logger.warn("三旗ADAS数据包1.x版本已经不再支持", mark);
+                    }
+                    else if (mark.startsWith("tricheer-adas-")) {
                         // 三旗ADAS设备数据
                         TricheerAdasPack pack = TricheerAdasPack.parse(buf);
                         if (pack != null && pack.isResolved()){

@@ -102,8 +102,8 @@ public class TricheerAdasPack {
         // 数据包最小长度检查
         if(data.length < s_frameLen) return false;
 
-        // leading '##'
-        if(data[0] != '#' || data[1] != '#') return false;
+        // leading '$$'
+        if(data[0] != '$' || data[1] != '$') return false;
 
         // VIN 只能包含可见字符0x20~0x7e
         for(int i=4;i<21;i++){

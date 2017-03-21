@@ -15,7 +15,8 @@ public class TricheerAdasPackTelemetry extends TricheerAdasPack{
     public List<BigTableEntry> prepareBigTableEntries(){
         List<BigTableEntry> listEntries = new ArrayList<>();
         for(TelemetrySegment s:_listSegments){
-            listEntries.add(s.prepareBigTableEntry(_vin, _tm));
+            BigTableEntry entry = s.prepareBigTableEntry(_vin, _tm);
+            if(entry != null) listEntries.add(entry);
         }
         return listEntries;
     }
@@ -24,12 +25,14 @@ public class TricheerAdasPackTelemetry extends TricheerAdasPack{
     protected void resolveFields(byte[] data){
         super.resolveFields(data);
 
-        // timestamp 0...5
+        // 2017-03-21 增加2个字节的毫秒
+        // timestamp 0...7
+        int ms = ((_payload[6]&0xff) << 8 | _payload[7]&0xff);
         this._tm = ZonedDateTime.of(2000+_payload[0], _payload[1], _payload[2],
-                _payload[3], _payload[4], _payload[5], 0, ZoneId.of("+8")).withZoneSameInstant(ZoneId.of("Z"));
+                _payload[3], _payload[4], _payload[5], ms*1000000, ZoneId.of("+8")).withZoneSameInstant(ZoneId.of("Z"));
         this._tm = correctTime(this._tm);
 
-        int posNext = 6;
+        int posNext = 8;
         do{
             // flag
             TricheerAdasFlag flag = TricheerAdasFlag.NA;

@@ -56,12 +56,12 @@ public class BigTableEntry {
                 calcMd5(_vin).substring(0, 4),
                 _vin,
                 _mark,
-                _tm.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")));
+                _tm.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS")));
     }
 
     // 生成Vehicle主键
     public String makePKVehicle(){
-        // MD5(VIN,前4位)+VIN+MARK+TIMESTAMP
+        // MD5(VIN,前4位)+VIN
         return String.format("%s%s",
                 calcMd5(_vin).substring(0, 4),
                 _vin);
